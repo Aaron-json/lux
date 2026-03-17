@@ -4,7 +4,7 @@ pub mod mpmc;
 pub mod spsc;
 
 /// Cache padding that enforces 64 byte alignment.
-#[repr(C, align(64))]
+#[repr(align(64))]
 pub struct CachePadded<T>(T);
 
 type Slot<T> = UnsafeCell<MaybeUninit<T>>;
