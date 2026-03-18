@@ -24,6 +24,16 @@ impl<T> SpscInner<T> {
             tail: CachePadded(AtomicUsize::new(0)),
         }
     }
+
+    #[inline(always)]
+    fn len(&self) -> usize {
+        self.buf.len()
+    }
+
+    #[inline(always)]
+    fn mask(&self, num: usize) -> usize {
+        num & (self.buf.len() - 1)
+    }
 }
 
 struct SpscProducer<T> {
@@ -43,15 +53,15 @@ impl<T> SpscProducer<T> {
 
         // Read the cached head, until it tells us the buffer is full then
         // load the actual value into it.
-        if t - self.head_cache == inner.buf.len() {
+        if t - self.head_cache == inner.len() {
             self.head_cache = inner.head.0.load(Ordering::Acquire);
-            if t - self.head_cache == inner.buf.len() {
+            if t - self.head_cache == inner.len() {
                 return Err(LuxError::BufferFull(val));
             }
         }
 
         unsafe {
-            (*inner.buf[t & (inner.buf.len() - 1)].get()).write(val);
+            (*inner.buf[inner.mask(t)].get()).write(val);
         }
 
         // publish the data
@@ -80,7 +90,7 @@ impl<T> SpscConsumer<T> {
             }
         }
 
-        let ret = unsafe { (*inner.buf[h & (inner.buf.len() - 1)].get()).assume_init_read() };
+        let ret = unsafe { (*inner.buf[inner.mask(h)].get()).assume_init_read() };
 
         inner.head.0.store(h + 1, Ordering::Release);
 
