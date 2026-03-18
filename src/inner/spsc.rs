@@ -53,9 +53,9 @@ impl<T> SpscProducer<T> {
 
         // Read the cached head, until it tells us the buffer is full then
         // load the actual value into it.
-        if t - self.head_cache == inner.len() {
+        if t.wrapping_sub(self.head_cache) == inner.len() {
             self.head_cache = inner.head.0.load(Ordering::Acquire);
-            if t - self.head_cache == inner.len() {
+            if t.wrapping_sub(self.head_cache) == inner.len() {
                 return Err(LuxError::BufferFull(val));
             }
         }
@@ -79,13 +79,13 @@ struct SpscConsumer<T> {
 }
 
 impl<T> SpscConsumer<T> {
-    fn try_pop(&mut self) -> Result<(T), LuxError<T>> {
+    fn try_pop(&mut self) -> Result<T, LuxError<T>> {
         let inner = &self.inner;
         let h = inner.head.0.load(Ordering::Relaxed);
 
-        if self.tail_cache - h == 0 {
+        if self.tail_cache.wrapping_sub(h) == 0 {
             self.tail_cache = inner.tail.0.load(Ordering::Acquire);
-            if self.tail_cache - h == 0 {
+            if self.tail_cache.wrapping_sub(h) == 0 {
                 return Err(LuxError::BufferEmpty);
             }
         }
