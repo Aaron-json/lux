@@ -3,7 +3,7 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
 };
 
-use crate::inner::{CachePadded, LuxError, SequencedSlot, alloc_sequenced_slots};
+use crate::inner::{CachePadded, SequencedSlot, alloc_sequenced_slots};
 
 // Used to implement a Multi-producer Multi-consumer queue. The design
 // implements Dmitry vyukov's MPMC Queue ideas.
@@ -56,7 +56,7 @@ struct MpmcProducer<T> {
 }
 
 impl<T> MpmcProducer<T> {
-    fn try_push(&self, val: T) -> Result<(), LuxError<T>> {
+    fn try_push(&self, val: T) -> Result<(), T> {
         let inner = &self.inner;
 
         let mut idx = inner.tail.0.load(Ordering::Relaxed);
@@ -93,7 +93,7 @@ impl<T> MpmcProducer<T> {
             } else if diff < 0 {
                 // this slot contains data from the previous lap's write. has not been
                 // read yet
-                return Err(LuxError::BufferFull(val));
+                return Err(val);
             } else if diff > 0 {
                 // another producer claimed the slot and updated tail and
                 // our copy is stale so we reload it.
@@ -113,7 +113,7 @@ struct MpmcConsumer<T> {
 }
 
 impl<T> MpmcConsumer<T> {
-    fn try_pop(&self) -> Result<T, LuxError<T>> {
+    fn try_pop(&self) -> Option<T> {
         let inner = &self.inner;
 
         let mut idx = inner.head.0.load(Ordering::Relaxed);
@@ -140,7 +140,7 @@ impl<T> MpmcConsumer<T> {
 
                         slot.seq.store(idx + inner.len(), Ordering::Release);
 
-                        return Ok(data);
+                        return Some(data);
                     }
                     Err(new_idx) => {
                         // another reader won the CAS
@@ -149,7 +149,7 @@ impl<T> MpmcConsumer<T> {
                 }
             } else if diff < 0 {
                 // producer has not written here yet
-                return Err(LuxError::BufferEmpty);
+                return None;
             } else {
                 // another consumer has read this position and advanced
                 // the sequence number but the head is stale

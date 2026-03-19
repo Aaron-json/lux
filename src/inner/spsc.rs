@@ -67,7 +67,7 @@ struct SpscProducer<T> {
 }
 
 impl<T> SpscProducer<T> {
-    fn try_push(&mut self, val: T) -> Result<(), LuxError<T>> {
+    fn try_push(&mut self, val: T) -> Result<(), T> {
         let inner = &self.inner;
         let t = inner.tail.0.load(Ordering::Relaxed);
 
@@ -76,7 +76,7 @@ impl<T> SpscProducer<T> {
         if t.wrapping_sub(self.head_cache) == inner.len() {
             self.head_cache = inner.head.0.load(Ordering::Acquire);
             if t.wrapping_sub(self.head_cache) == inner.len() {
-                return Err(LuxError::BufferFull(val));
+                return Err(val);
             }
         }
 
@@ -99,22 +99,22 @@ struct SpscConsumer<T> {
 }
 
 impl<T> SpscConsumer<T> {
-    fn try_pop(&mut self) -> Result<T, LuxError<T>> {
+    fn try_pop(&mut self) -> Option<T> {
         let inner = &self.inner;
         let h = inner.head.0.load(Ordering::Relaxed);
 
         if self.tail_cache.wrapping_sub(h) == 0 {
             self.tail_cache = inner.tail.0.load(Ordering::Acquire);
             if self.tail_cache.wrapping_sub(h) == 0 {
-                return Err(LuxError::BufferEmpty);
+                return None;
             }
         }
 
-        let ret = unsafe { (*inner.buf[inner.mask(h)].get()).assume_init_read() };
+        let val = unsafe { (*inner.buf[inner.mask(h)].get()).assume_init_read() };
 
         inner.head.0.store(h + 1, Ordering::Release);
 
-        Ok(ret)
+        Some(val)
     }
 }
 
