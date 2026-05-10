@@ -114,9 +114,8 @@ impl<T: BloomHasher> Bloom<T> {
     fn bit_index(&self, h1: u64, h2: u64, i: u32) -> u64 {
         let h_combined = h1.wrapping_add((i as u64).wrapping_mul(h2));
 
-        // NOTE: I could replace this with Lemire's fast range but I am
-        // not convinced yet.
-        h_combined % self.bits_size
+        // fastrange to avoid modulo
+        ((h_combined as u128 * self.bits_size as u128) >> 64) as u64
     }
 
     /// Returns whether the data PROBABLY exists in the set or if it
